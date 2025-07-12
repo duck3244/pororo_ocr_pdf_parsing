@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-웹 인터페이스 모듈
-Flask 기반 웹 애플리케이션
+수정된 웹 앱 - OCR 결과 파싱 로직 개선
+web/app.py 파일을 이 내용으로 교체하세요.
 """
 
 import os
@@ -50,6 +50,122 @@ for folder in [app.config['UPLOAD_FOLDER'], app.config['RESULT_FOLDER']]:
 processing_jobs: Dict[str, Dict[str, Any]] = {}
 
 
+def extract_text_from_ocr_result(ocr_result, page_number):
+    """
+    OCR 결과에서 텍스트 추출 - 개선된 로직
+    Pororo OCR의 다양한 출력 형태를 처리
+    """
+    text_regions = []
+    raw_debug_info = []
+
+    logger.info(f"Processing OCR results for page {page_number}")
+    logger.info(
+        f"OCR result type: {type(ocr_result)}, length: {len(ocr_result) if isinstance(ocr_result, (list, dict)) else 'N/A'}")
+
+    if not ocr_result:
+        return text_regions, raw_debug_info
+
+    # OCR 결과가 문자열인 경우
+    if isinstance(ocr_result, str):
+        if ocr_result.strip():
+            text_regions.append(ocr_result.strip())
+        return text_regions, [f"String result: {ocr_result}"]
+
+    # OCR 결과가 리스트인 경우
+    if isinstance(ocr_result, list):
+        for idx, item in enumerate(ocr_result):
+            extracted_text = ""
+            debug_info = f"Item {idx}: type={type(item)}"
+
+            try:
+                # 1. 튜플 형태: (bbox, text, confidence) - Pororo OCR의 일반적인 출력
+                if isinstance(item, tuple) and len(item) >= 2:
+                    if isinstance(item[1], str) and item[1].strip():
+                        extracted_text = item[1].strip()
+                        debug_info += f", tuple[1]={item[1]}"
+
+                # 2. 딕셔너리 형태
+                elif isinstance(item, dict):
+                    debug_info += f", keys={list(item.keys())}"
+
+                    # 일반적인 텍스트 키들 확인
+                    text_keys = ['text', 'description', 'word', 'content', 'value', 'result']
+                    for key in text_keys:
+                        if key in item and isinstance(item[key], str) and item[key].strip():
+                            extracted_text = item[key].strip()
+                            debug_info += f", found_in={key}"
+                            break
+
+                    # 위의 키들이 없으면 문자열 값을 가진 키 찾기
+                    if not extracted_text:
+                        for key, value in item.items():
+                            if (isinstance(value, str) and value.strip() and
+                                    not key.lower().startswith(('bbox', 'bound', 'vertices', 'poly', 'coordinate')) and
+                                    value.lower() not in ['description', 'bounding_poly', 'boundingpoly', 'bbox']):
+                                extracted_text = value.strip()
+                                debug_info += f", found_string_in={key}"
+                                break
+
+                # 3. 문자열 형태
+                elif isinstance(item, str) and item.strip():
+                    extracted_text = item.strip()
+                    debug_info += f", direct_string={item}"
+
+                # 4. 리스트 형태 (중첩 리스트)
+                elif isinstance(item, list) and len(item) > 0:
+                    for sub_item in item:
+                        if isinstance(sub_item, str) and sub_item.strip():
+                            extracted_text = sub_item.strip()
+                            debug_info += f", from_sublist={sub_item}"
+                            break
+
+                # 유효한 텍스트인지 최종 확인
+                if extracted_text:
+                    # 메타데이터 키워드 제외
+                    excluded_texts = {
+                        'description', 'bounding_poly', 'boundingpoly', 'bbox',
+                        'vertices', 'coordinates', 'polygon', 'rect'
+                    }
+                    if extracted_text.lower() not in excluded_texts and len(extracted_text.strip()) > 0:
+                        text_regions.append(extracted_text)
+                        logger.info(f"✅ Extracted text from region {idx}: '{extracted_text}'")
+                        debug_info += f" -> EXTRACTED: '{extracted_text}'"
+                    else:
+                        debug_info += f" -> EXCLUDED: '{extracted_text}'"
+                else:
+                    debug_info += " -> NO_TEXT_FOUND"
+
+            except Exception as e:
+                debug_info += f" -> ERROR: {str(e)}"
+                logger.warning(f"Error processing OCR item {idx}: {str(e)}")
+
+            raw_debug_info.append(debug_info)
+
+    # OCR 결과가 딕셔너리인 경우 (예: {'description': [...], 'bounding_poly': [...]})
+    elif isinstance(ocr_result, dict):
+        debug_info = f"Dict result with keys: {list(ocr_result.keys())}"
+
+        # description 키에서 텍스트 리스트 찾기
+        if 'description' in ocr_result and isinstance(ocr_result['description'], list):
+            for text in ocr_result['description']:
+                if isinstance(text, str) and text.strip():
+                    text_regions.append(text.strip())
+                    logger.info(f"✅ Extracted from description: '{text.strip()}'")
+
+        # 다른 가능한 키들 확인
+        for key in ['texts', 'results', 'words', 'content', 'items']:
+            if key in ocr_result and isinstance(ocr_result[key], list):
+                for text in ocr_result[key]:
+                    if isinstance(text, str) and text.strip():
+                        text_regions.append(text.strip())
+                        logger.info(f"✅ Extracted from {key}: '{text.strip()}'")
+
+        raw_debug_info.append(debug_info)
+
+    logger.info(f"📊 Page {page_number} final result: {len(text_regions)} regions extracted")
+    return text_regions, raw_debug_info
+
+
 class OCRProcessor:
     """OCR 처리 통합 클래스"""
 
@@ -73,7 +189,7 @@ class OCRProcessor:
             raise
 
     def process_pdf(self, pdf_path: str, job_id: str, options: Dict[str, Any]) -> Dict[str, Any]:
-        """PDF 처리 메인 함수"""
+        """개선된 PDF 처리 함수 - Pororo OCR 최적화"""
         try:
             # 1. PDF 유효성 검사
             self._update_job_status(job_id, 'validating', 5, 'PDF 파일 검증 중...')
@@ -90,7 +206,6 @@ class OCRProcessor:
 
             output_dir = Path(app.config['RESULT_FOLDER']) / job_id
             output_dir.mkdir(exist_ok=True)
-
             self.pdf_handler.output_dir = output_dir
 
             def conversion_progress(current, total, filename):
@@ -122,70 +237,57 @@ class OCRProcessor:
                     progress_callback=preprocess_progress
                 )
 
-                # None 값 제거 (실패한 전처리)
                 final_image_paths = [path for path in preprocessed_paths if path is not None]
             else:
                 final_image_paths = image_paths
 
-            # 5. OCR 텍스트 추출
+            # 5. OCR 텍스트 추출 - 🔥 핵심 수정 부분
             self._update_job_status(job_id, 'ocr', 70, 'OCR 텍스트 추출 중...')
 
             def ocr_progress(current, total, filename):
                 progress = 70 + (current / total) * 20  # 70% ~ 90%
                 self._update_job_status(job_id, 'ocr', progress, f'OCR {current}/{total} 처리 중...')
 
+            # 개선된 OCR 엔진 사용
+            logger.info(f"🚀 개선된 OCR 처리 시작: {len(final_image_paths)}개 이미지")
             ocr_results = self.ocr_engine.batch_extract(final_image_paths, ocr_progress)
 
-            # 6. 텍스트 후처리 (옵션)
+            # 6. 텍스트 후처리 - 🔥 결과 처리 개선
             self._update_job_status(job_id, 'postprocessing', 90, '텍스트 후처리 중...')
 
             pages_data = []
+            total_successful_pages = 0
+            total_text_regions = 0
+            total_characters = 0
+
             for i, image_path in enumerate(final_image_paths):
                 page_number = i + 1
                 ocr_result = ocr_results.get(image_path, [])
 
-                # OCR 결과 정제 - description과 bounding_poly 키 확인
-                text_regions = []
-                raw_texts = []  # 디버깅용
+                logger.info(f"📄 페이지 {page_number} OCR 결과 처리: {len(ocr_result)}개 영역")
 
-                logger.info(f"Processing OCR results for page {page_number}: {len(ocr_result)} regions")
+                # 🔥 개선된 텍스트 추출 로직
+                text_regions = []
+                page_has_text = False
 
                 for idx, region in enumerate(ocr_result):
-                    extracted_text = ""
-
-                    if isinstance(region, dict):
-                        logger.debug(f"Region {idx} keys: {list(region.keys())}")
-
-                        # Pororo OCR 결과 구조에 맞게 텍스트 추출
-                        if 'text' in region and region['text'].strip():
-                            extracted_text = region['text'].strip()
-                        elif 'description' in region and region['description'].strip():
-                            extracted_text = region['description'].strip()
-                        elif 'word' in region and region['word'].strip():
-                            extracted_text = region['word'].strip()
-                        else:
-                            # 딕셔너리에서 문자열 값 찾기
-                            for key, value in region.items():
-                                if isinstance(value, str) and value.strip() and not key.startswith(
-                                        'bbox') and not key.startswith('bound'):
-                                    extracted_text = value.strip()
-                                    break
-
-                    elif isinstance(region, str) and region.strip():
-                        extracted_text = region.strip()
-
-                    raw_texts.append(f"Region {idx}: {region}")  # 디버깅용
-
-                    if extracted_text and extracted_text not in ['description', 'bounding_poly', 'boundingPoly',
-                                                                 'bbox']:
-                        text_regions.append(extracted_text)
-                        logger.info(f"Extracted text from region {idx}: '{extracted_text}'")
+                    if isinstance(region, dict) and 'text' in region:
+                        text = region['text'].strip()
+                        if text and len(text) > 0:
+                            text_regions.append(text)
+                            page_has_text = True
+                            logger.debug(f"    영역 {idx + 1}: '{text[:50]}{'...' if len(text) > 50 else ''}'")
 
                 # 텍스트 결합
                 combined_text = '\n'.join(text_regions) if text_regions else ''
 
-                logger.info(
-                    f"Page {page_number} final result: {len(text_regions)} regions, {len(combined_text)} characters")
+                # 통계 업데이트
+                if page_has_text:
+                    total_successful_pages += 1
+                    total_text_regions += len(text_regions)
+                    total_characters += len(combined_text)
+
+                logger.info(f"✅ 페이지 {page_number} 최종 결과: {len(text_regions)}개 영역, {len(combined_text)}글자")
 
                 page_data = {
                     'page_number': page_number,
@@ -193,48 +295,79 @@ class OCRProcessor:
                     'text_regions': text_regions,
                     'combined_text': combined_text,
                     'text_count': len(text_regions),
-                    'ocr_data': ocr_result,
-                    'debug_raw_texts': raw_texts  # 디버깅용
+                    'has_text': page_has_text,
+                    'character_count': len(combined_text),
+                    'debug_info': {
+                        'ocr_result_type': str(type(ocr_result)),
+                        'ocr_result_length': len(ocr_result),
+                        'raw_ocr_sample': str(ocr_result[0]) if ocr_result else 'None'
+                    }
                 }
 
-                # 텍스트 후처리 적용
+                # 텍스트 후처리 적용 (텍스트가 있는 경우에만)
                 if options.get('postprocess', True) and combined_text.strip():
                     try:
                         processed_text = self.text_processor.process_page_text(combined_text, page_number)
                         page_data['processed_text'] = processed_text
+                        logger.debug(f"    후처리 완료: 페이지 {page_number}")
                     except Exception as e:
-                        logger.warning(f"Text postprocessing failed for page {page_number}: {str(e)}")
+                        logger.warning(f"⚠️ 페이지 {page_number} 후처리 실패: {str(e)}")
 
                 pages_data.append(page_data)
 
-            # 7. 결과 통합
+            # 7. 결과 통합 및 요약
+            logger.info(f"🎯 전체 처리 결과:")
+            logger.info(f"  - 총 페이지: {len(pages_data)}")
+            logger.info(f"  - 텍스트가 있는 페이지: {total_successful_pages}")
+            logger.info(f"  - 총 텍스트 영역: {total_text_regions}")
+            logger.info(f"  - 총 글자 수: {total_characters}")
+
+            success_rate = (total_successful_pages / len(pages_data) * 100) if pages_data else 0
+            logger.info(f"  - 성공률: {success_rate:.1f}%")
+
             results = {
                 'pdf_info': pdf_info,
                 'processing_options': options,
                 'pages': pages_data,
                 'job_id': job_id,
-                'processed_at': datetime.now().isoformat()
+                'processed_at': datetime.now().isoformat(),
+                'processing_summary': {
+                    'total_pages': len(pages_data),
+                    'successful_pages': total_successful_pages,
+                    'success_rate': success_rate,
+                    'total_text_regions': total_text_regions,
+                    'total_characters': total_characters
+                }
             }
 
             # 문서 요약 생성 (후처리 활성화 시)
-            if options.get('postprocess', True):
-                processed_pages = [page['processed_text'] for page in pages_data if 'processed_text' in page]
-                if processed_pages:
-                    document_summary = self.text_processor.generate_document_summary(processed_pages)
-                    results['document_summary'] = document_summary
+            if options.get('postprocess', True) and total_successful_pages > 0:
+                try:
+                    processed_pages = [page['processed_text'] for page in pages_data if 'processed_text' in page]
+                    if processed_pages:
+                        document_summary = self.text_processor.generate_document_summary(processed_pages)
+                        results['document_summary'] = document_summary
+                        logger.info("📊 문서 요약 생성 완료")
+                except Exception as e:
+                    logger.warning(f"⚠️ 문서 요약 생성 실패: {str(e)}")
 
             # 8. 결과 저장
             self._save_results(results, output_dir)
 
-            self._update_job_status(job_id, 'completed', 100, '처리 완료!')
-            processing_jobs[job_id]['results'] = results
+            # 최종 상태 업데이트
+            if total_successful_pages > 0:
+                self._update_job_status(job_id, 'completed', 100,
+                                        f'처리 완료! ({total_successful_pages}/{len(pages_data)} 페이지 성공)')
+            else:
+                self._update_job_status(job_id, 'completed', 100, '처리 완료 (텍스트 없음)')
 
+            processing_jobs[job_id]['results'] = results
             return results
 
         except Exception as e:
             error_msg = f"처리 중 오류 발생: {str(e)}"
             self._update_job_status(job_id, 'error', 0, error_msg)
-            logger.error(f"Processing failed for job {job_id}: {str(e)}")
+            logger.error(f"❌ PDF 처리 실패 (Job: {job_id}): {str(e)}")
             raise
 
     def _update_job_status(self, job_id: str, status: str, progress: float, message: str):
@@ -248,24 +381,80 @@ class OCRProcessor:
             })
 
     def _save_results(self, results: Dict[str, Any], output_dir: Path):
-        """결과 파일 저장"""
-        # JSON 결과 저장
-        json_path = output_dir / 'results.json'
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
+        """결과 파일 저장 - 완전 수정 버전"""
+        try:
+            # 1. JSON 결과 저장
+            json_path = output_dir / 'results.json'
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(results, f, ensure_ascii=False, indent=2)
+            logger.info(f"JSON 결과 저장: {json_path}")
 
-        # 텍스트 결과 저장
-        txt_path = output_dir / 'extracted_text.txt'
-        with open(txt_path, 'w', encoding='utf-8') as f:
-            f.write(f"OCR 처리 결과\n")
-            f.write(f"처리 시간: {results['processed_at']}\n")
-            f.write("=" * 50 + "\n\n")
+            # 2. 텍스트 결과 저장
+            txt_path = output_dir / 'extracted_text.txt'
+            with open(txt_path, 'w', encoding='utf-8') as f:
+                f.write(f"OCR 처리 결과\n")
+                f.write(f"처리 시간: {results.get('processed_at', 'Unknown')}\n")
+                f.write(f"성공률: {results.get('processing_summary', {}).get('success_rate', 0):.1f}%\n")
+                f.write("=" * 50 + "\n\n")
 
-            for page in results['pages']:
-                f.write(f"페이지 {page['page_number']}\n")
-                f.write("-" * 20 + "\n")
-                f.write(page['combined_text'])
-                f.write("\n\n")
+                for page in results.get('pages', []):
+                    page_number = page.get('page_number', 'Unknown')
+                    f.write(f"페이지 {page_number}\n")
+                    f.write("-" * 20 + "\n")
+
+                    # 안전한 텍스트 추출
+                    combined_text = page.get('combined_text', '')
+                    has_text = page.get('has_text', False)
+                    text_count = page.get('text_count', 0)
+
+                    if has_text or combined_text.strip():
+                        f.write(f"텍스트 영역 수: {text_count}\n")
+                        f.write(f"글자 수: {page.get('character_count', len(combined_text))}\n\n")
+                        f.write(combined_text if combined_text.strip() else "텍스트 없음")
+                    else:
+                        f.write("이 페이지에서는 텍스트를 찾을 수 없습니다.")
+
+                    f.write("\n\n")
+
+            logger.info(f"텍스트 결과 저장: {txt_path}")
+
+            # 3. CSV 요약 저장 (처리 요약이 있는 경우)
+            if 'processing_summary' in results:
+                csv_path = output_dir / 'summary.csv'
+                try:
+                    import csv
+                    with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+                        writer = csv.writer(f)
+
+                        # 헤더
+                        writer.writerow([
+                            '페이지', '텍스트_영역_수', '글자_수', '텍스트_있음', '텍스트_미리보기'
+                        ])
+
+                        # 데이터
+                        for page in results.get('pages', []):
+                            preview = page.get('combined_text', '')[:100].replace('\n', ' ')
+                            if len(preview) > 97:
+                                preview += '...'
+
+                            writer.writerow([
+                                page.get('page_number', 0),
+                                page.get('text_count', 0),
+                                page.get('character_count', 0),
+                                'Y' if page.get('has_text', False) else 'N',
+                                preview
+                            ])
+
+                    logger.info(f"CSV 요약 저장: {csv_path}")
+
+                except Exception as e:
+                    logger.warning(f"CSV 저장 실패: {str(e)}")
+
+            logger.info(f"✅ 모든 결과 저장 완료: {output_dir}")
+
+        except Exception as e:
+            logger.error(f"❌ 결과 저장 실패: {str(e)}")
+            raise
 
 
 # OCR 프로세서 인스턴스
@@ -434,6 +623,12 @@ def download_results(job_id: str, format: str):
                 return send_file(file_path, as_attachment=True,
                                  download_name=f"{job['filename']}_text.txt")
 
+        elif format == 'debug':
+            file_path = results_dir / 'debug_info.json'
+            if file_path.exists():
+                return send_file(file_path, as_attachment=True,
+                                 download_name=f"{job['filename']}_debug.json")
+
         elif format == 'csv':
             # CSV 파일 동적 생성
             if 'results' in job and 'document_summary' in job['results']:
@@ -469,7 +664,7 @@ def generate_csv_summary(results: Dict[str, Any]) -> str:
 
     # 헤더
     writer.writerow([
-        '페이지', '글자수', '단어수', '텍스트영역수', '언어', '텍스트미리보기'
+        '페이지', '추출성공', '글자수', '단어수', '텍스트영역수', '언어', '텍스트미리보기'
     ])
 
     # 페이지별 데이터
@@ -483,6 +678,7 @@ def generate_csv_summary(results: Dict[str, Any]) -> str:
 
         writer.writerow([
             page['page_number'],
+            '성공' if page['extraction_success'] else '실패',
             len(page['combined_text']),
             len(page['combined_text'].split()),
             page['text_count'],
@@ -493,99 +689,22 @@ def generate_csv_summary(results: Dict[str, Any]) -> str:
     return output.getvalue()
 
 
-@app.route('/api/process', methods=['POST'])
-def api_process():
-    """API 엔드포인트 - 동기 처리"""
-    try:
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
+@app.route('/debug/<job_id>')
+def debug_results(job_id: str):
+    """디버그 정보 페이지"""
+    if job_id not in processing_jobs:
+        return jsonify({'error': '작업을 찾을 수 없습니다.'}), 404
 
-        file = request.files['file']
-        if not file or not allowed_file(file.filename):
-            return jsonify({'error': 'Invalid file type'}), 400
+    job = processing_jobs[job_id]
+    results_dir = Path(app.config['RESULT_FOLDER']) / job_id
+    debug_path = results_dir / 'debug_info.json'
 
-        # 파일 저장
-        filename = secure_filename(file.filename)
-        job_id = str(uuid.uuid4())
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{job_id}_{filename}")
-        file.save(file_path)
-
-        # 처리 옵션
-        options = {
-            'dpi': int(request.form.get('dpi', 300)),
-            'preprocess': request.form.get('preprocess', 'true').lower() == 'true',
-            'postprocess': request.form.get('postprocess', 'true').lower() == 'true'
-        }
-
-        # 작업 상태 초기화
-        processing_jobs[job_id] = {
-            'job_id': job_id,
-            'filename': filename,
-            'status': 'processing',
-            'progress': 0,
-            'message': 'API 처리 중...',
-            'created_at': datetime.now().isoformat()
-        }
-
-        # 동기 처리
-        results = ocr_processor.process_pdf(file_path, job_id, options)
-
-        # 임시 파일 정리
-        try:
-            os.remove(file_path)
-        except:
-            pass
-
-        return jsonify({
-            'job_id': job_id,
-            'status': 'completed',
-            'results': results
-        })
-
-    except Exception as e:
-        logger.error(f"API processing error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/status/<job_id>')
-def api_get_status(job_id: str):
-    """API 상태 조회"""
-    return get_status(job_id)
-
-
-@app.route('/cleanup')
-def cleanup_old_jobs():
-    """오래된 작업 정리"""
-    try:
-        current_time = datetime.now()
-        jobs_to_remove = []
-
-        for job_id, job_data in processing_jobs.items():
-            created_at = datetime.fromisoformat(job_data['created_at'])
-            # 24시간 이상 된 작업 제거
-            if (current_time - created_at).total_seconds() > 86400:
-                jobs_to_remove.append(job_id)
-
-                # 결과 파일도 제거
-                try:
-                    results_dir = Path(app.config['RESULT_FOLDER']) / job_id
-                    if results_dir.exists():
-                        import shutil
-                        shutil.rmtree(results_dir)
-                except:
-                    pass
-
-        for job_id in jobs_to_remove:
-            del processing_jobs[job_id]
-
-        return jsonify({
-            'message': f'{len(jobs_to_remove)}개의 오래된 작업을 정리했습니다.',
-            'removed_jobs': len(jobs_to_remove)
-        })
-
-    except Exception as e:
-        logger.error(f"Cleanup error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+    if debug_path.exists():
+        with open(debug_path, 'r', encoding='utf-8') as f:
+            debug_data = json.load(f)
+        return jsonify(debug_data)
+    else:
+        return jsonify({'error': '디버그 정보를 찾을 수 없습니다.'}), 404
 
 
 @app.route('/health')

@@ -12,15 +12,18 @@
 <body>
     <div class="container-fluid">
         <!-- 헤더 -->
-        <header class="bg-success text-white py-3 mb-4">
+        <header class="{% if results.processing_summary.success_rate > 80 %}bg-success{% elif results.processing_summary.success_rate > 50 %}bg-warning{% else %}bg-danger{% endif %} text-white py-3 mb-4">
             <div class="container">
                 <div class="row align-items-center">
                     <div class="col-md-8">
                         <h1 class="mb-0">
-                            <i class="fas fa-check-circle me-2"></i>
-                            처리 완료
+                            <i class="fas fa-{% if results.processing_summary.success_rate > 80 %}check-circle{% elif results.processing_summary.success_rate > 50 %}exclamation-triangle{% else %}times-circle{% endif %} me-2"></i>
+                            처리 {% if results.processing_summary.success_rate > 80 %}완료{% elif results.processing_summary.success_rate > 50 %}부분 성공{% else %}실패{% endif %}
                         </h1>
-                        <p class="mb-0 opacity-75">OCR 처리가 성공적으로 완료되었습니다</p>
+                        <p class="mb-0 opacity-75">
+                            OCR 처리 성공률: {{results.processing_summary.success_rate|round(1)}}%
+                            ({{results.processing_summary.successful_pages}}/{{results.processing_summary.total_pages}} 페이지)
+                        </p>
                     </div>
                     <div class="col-md-4 text-end">
                         <a href="/" class="btn btn-outline-light me-2">
@@ -41,6 +44,10 @@
                                 </a></li>
                                 <li><a class="dropdown-item" href="/download/{{job_id}}/csv">
                                     <i class="fas fa-file-csv me-2"></i>CSV 요약
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="/download/{{job_id}}/debug">
+                                    <i class="fas fa-bug me-2"></i>디버그 정보
                                 </a></li>
                             </ul>
                         </div>
@@ -66,11 +73,11 @@
                 <div class="col-md-3">
                     <div class="stats-card">
                         <div class="stats-icon">
-                            <i class="fas fa-text-width"></i>
+                            <i class="fas fa-check-circle"></i>
                         </div>
                         <div class="stats-content">
-                            <h3 id="totalTextRegions">계산 중...</h3>
-                            <p>텍스트 영역</p>
+                            <h3>{{results.processing_summary.successful_pages}}</h3>
+                            <p>성공한 페이지</p>
                         </div>
                     </div>
                 </div>
@@ -80,7 +87,7 @@
                             <i class="fas fa-font"></i>
                         </div>
                         <div class="stats-content">
-                            <h3 id="totalCharacters">계산 중...</h3>
+                            <h3>{{results.processing_summary.total_characters|number_format}}</h3>
                             <p>총 글자 수</p>
                         </div>
                     </div>
@@ -88,11 +95,11 @@
                 <div class="col-md-3">
                     <div class="stats-card">
                         <div class="stats-icon">
-                            <i class="fas fa-clock"></i>
+                            <i class="fas fa-percentage"></i>
                         </div>
                         <div class="stats-content">
-                            <h3 id="processingTime">-</h3>
-                            <p>처리 시간</p>
+                            <h3>{{results.processing_summary.success_rate|round(1)}}%</h3>
+                            <p>성공률</p>
                         </div>
                     </div>
                 </div>
@@ -106,6 +113,7 @@
                         페이지별 결과
                     </button>
                 </li>
+                {% if results.document_summary %}
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" type="button">
                         <i class="fas fa-chart-bar me-2"></i>
@@ -116,6 +124,13 @@
                     <button class="nav-link" id="entities-tab" data-bs-toggle="tab" data-bs-target="#entities" type="button">
                         <i class="fas fa-tags me-2"></i>
                         추출된 정보
+                    </button>
+                </li>
+                {% endif %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="debug-tab" data-bs-toggle="tab" data-bs-target="#debug" type="button">
+                        <i class="fas fa-bug me-2"></i>
+                        디버그 정보
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -132,61 +147,52 @@
                     <div class="row">
                         {% for page in results.pages %}
                         <div class="col-12 mb-4">
-                            <div class="page-content-card">
-                                <div class="page-header">
+                            <div class="page-content-card {% if not page.extraction_success %}border-warning{% endif %}">
+                                <div class="page-header {% if not page.extraction_success %}bg-warning bg-opacity-10{% endif %}">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <h4>
                                             <i class="fas fa-file-alt me-2"></i>
                                             페이지 {{page.page_number}}
+                                            {% if page.extraction_success %}
+                                                <span class="badge bg-success ms-2">성공</span>
+                                            {% else %}
+                                                <span class="badge bg-warning ms-2">텍스트 없음</span>
+                                            {% endif %}
                                         </h4>
                                         <div>
                                             <span class="badge bg-primary">{{page.text_count}}개 텍스트 영역</span>
+                                            {% if page.combined_text %}
                                             <button class="btn btn-outline-secondary btn-sm ms-2" onclick="copyPageText({{page.page_number}})">
                                                 <i class="fas fa-copy me-1"></i>복사
                                             </button>
+                                            {% endif %}
                                         </div>
                                     </div>
                                 </div>
-                                
-                                {% if page.text_regions and page.text_regions|length > 0 and page.text_regions[0] %}
+
+                                {% if page.extraction_success and page.text_regions %}
                                 <div class="page-content">
                                     <div class="row">
                                         <div class="col-md-6">
                                             <h6 class="section-title">
                                                 <i class="fas fa-list me-2"></i>
-                                                개별 텍스트 영역
+                                                개별 텍스트 영역 ({{page.text_count}}개)
                                             </h6>
                                             <div class="text-regions">
                                                 {% for text in page.text_regions %}
-                                                {% if text and text.strip() %}
                                                 <div class="text-region">
                                                     <div class="region-header">
                                                         <small class="text-muted">영역 {{loop.index}}</small>
                                                     </div>
                                                     <div class="region-content">{{text}}</div>
                                                 </div>
-                                                {% endif %}
                                                 {% endfor %}
                                             </div>
                                         </div>
                                         <div class="col-md-6">
                                             <h6 class="section-title">
                                                 <i class="fas fa-align-left me-2"></i>
-                                                통합 텍스트
-                                            </h6>
-                                            <div class="combined-text" id="pageText{{page.page_number}}">
-                                                <pre>{{page.combined_text or '텍스트를 찾을 수 없습니다.'}}</pre>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                {% elif page.combined_text and page.combined_text.strip() %}
-                                <div class="page-content">
-                                    <div class="row">
-                                        <div class="col-12">
-                                            <h6 class="section-title">
-                                                <i class="fas fa-align-left me-2"></i>
-                                                추출된 텍스트
+                                                통합 텍스트 ({{page.combined_text|length}} 글자)
                                             </h6>
                                             <div class="combined-text" id="pageText{{page.page_number}}">
                                                 <pre>{{page.combined_text}}</pre>
@@ -195,15 +201,20 @@
                                     </div>
                                 </div>
                                 {% else %}
-                                <div class="alert alert-warning">
-                                    <i class="fas fa-exclamation-triangle me-2"></i>
-                                    이 페이지에서 텍스트를 찾을 수 없습니다.
-                                    {% if page.ocr_data %}
-                                    <details class="mt-2">
-                                        <summary>디버그 정보 (클릭하여 확장)</summary>
-                                        <pre class="mt-2"><code>{{page.ocr_data|tojson(indent=2)}}</code></pre>
-                                    </details>
-                                    {% endif %}
+                                <div class="page-content">
+                                    <div class="alert alert-warning">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        이 페이지에서 텍스트를 찾을 수 없습니다.
+                                        <details class="mt-2">
+                                            <summary>가능한 원인 및 해결방법</summary>
+                                            <ul class="mt-2 mb-0">
+                                                <li>이미지 품질이 낮을 수 있습니다 (DPI를 높여보세요)</li>
+                                                <li>텍스트가 이미지로 구성되어 있을 수 있습니다</li>
+                                                <li>OCR 모델이 인식하기 어려운 폰트일 수 있습니다</li>
+                                                <li>이미지 전처리를 활성화해보세요</li>
+                                            </ul>
+                                        </details>
+                                    </div>
                                 </div>
                                 {% endif %}
                             </div>
@@ -213,8 +224,8 @@
                 </div>
 
                 <!-- 문서 요약 -->
+                {% if results.document_summary %}
                 <div class="tab-pane fade" id="summary" role="tabpanel">
-                    {% if results.document_summary %}
                     <div class="row">
                         <div class="col-md-6 mb-4">
                             <div class="summary-card">
@@ -269,68 +280,29 @@
                             </div>
                         </div>
                     </div>
-                    {% else %}
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        문서 요약 정보가 없습니다. 후처리가 활성화되지 않았을 수 있습니다.
-                    </div>
-                    {% endif %}
                 </div>
 
                 <!-- 추출된 정보 -->
                 <div class="tab-pane fade" id="entities" role="tabpanel">
-                    {% if results.document_summary and results.document_summary.extracted_entities %}
+                    {% if results.document_summary.extracted_entities %}
                     <div class="row">
+                        {% for entity_type, entities in results.document_summary.extracted_entities.items() %}
+                        {% if entities %}
                         <div class="col-md-6 mb-4">
                             <div class="entity-card">
                                 <h6 class="entity-title">
-                                    <i class="fas fa-heading me-2"></i>
-                                    제목 ({{results.document_summary.extracted_entities.titles|length}})
+                                    <i class="fas fa-{% if entity_type == 'email' %}envelope{% elif entity_type == 'phone' %}phone{% elif entity_type == 'date' %}calendar{% elif entity_type == 'url' %}link{% else %}tag{% endif %} me-2"></i>
+                                    {{entity_type|title}} ({{entities|length}})
                                 </h6>
                                 <div class="entity-content">
-                                    {% for title in results.document_summary.extracted_entities.titles %}
-                                    <span class="entity-badge">{{title}}</span>
-                                    {% endfor %}
-                                </div>
-                            </div>
-
-                            <div class="entity-card">
-                                <h6 class="entity-title">
-                                    <i class="fas fa-envelope me-2"></i>
-                                    이메일 ({{results.document_summary.extracted_entities.emails|length}})
-                                </h6>
-                                <div class="entity-content">
-                                    {% for email in results.document_summary.extracted_entities.emails %}
-                                    <span class="entity-badge">{{email}}</span>
+                                    {% for entity in entities %}
+                                    <span class="entity-badge">{{entity}}</span>
                                     {% endfor %}
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6 mb-4">
-                            <div class="entity-card">
-                                <h6 class="entity-title">
-                                    <i class="fas fa-phone me-2"></i>
-                                    전화번호 ({{results.document_summary.extracted_entities.phone_numbers|length}})
-                                </h6>
-                                <div class="entity-content">
-                                    {% for phone in results.document_summary.extracted_entities.phone_numbers %}
-                                    <span class="entity-badge">{{phone}}</span>
-                                    {% endfor %}
-                                </div>
-                            </div>
-
-                            <div class="entity-card">
-                                <h6 class="entity-title">
-                                    <i class="fas fa-calendar me-2"></i>
-                                    날짜 ({{results.document_summary.extracted_entities.dates|length}})
-                                </h6>
-                                <div class="entity-content">
-                                    {% for date in results.document_summary.extracted_entities.dates %}
-                                    <span class="entity-badge">{{date}}</span>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
+                        {% endif %}
+                        {% endfor %}
                     </div>
                     {% else %}
                     <div class="alert alert-info">
@@ -338,6 +310,150 @@
                         추출된 엔티티 정보가 없습니다. 후처리가 활성화되지 않았을 수 있습니다.
                     </div>
                     {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- 디버그 정보 -->
+                <div class="tab-pane fade" id="debug" role="tabpanel">
+                    <div class="row">
+                        <div class="col-12 mb-4">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>디버그 정보:</strong> OCR 처리 과정에서 발생한 상세 정보를 확인할 수 있습니다.
+                            </div>
+                        </div>
+
+                        <!-- 처리 요약 -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-chart-line me-2"></i>
+                                        처리 요약
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <tr>
+                                            <td>총 페이지:</td>
+                                            <td><strong>{{results.processing_summary.total_pages}}</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td>성공한 페이지:</td>
+                                            <td><strong>{{results.processing_summary.successful_pages}}</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td>실패한 페이지:</td>
+                                            <td><strong>{{results.processing_summary.total_pages - results.processing_summary.successful_pages}}</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td>성공률:</td>
+                                            <td><strong>{{results.processing_summary.success_rate|round(1)}}%</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td>총 글자 수:</td>
+                                            <td><strong>{{results.processing_summary.total_characters|number_format}}</strong></td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 처리 옵션 -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-cogs me-2"></i>
+                                        처리 옵션
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <tr>
+                                            <td>DPI:</td>
+                                            <td><strong>{{results.processing_options.dpi}}</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td>이미지 전처리:</td>
+                                            <td><strong>{% if results.processing_options.preprocess %}활성화{% else %}비활성화{% endif %}</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td>텍스트 후처리:</td>
+                                            <td><strong>{% if results.processing_options.postprocess %}활성화{% else %}비활성화{% endif %}</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td>처리 시간:</td>
+                                            <td><strong>{{results.processed_at}}</strong></td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 페이지별 디버그 정보 -->
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-list me-2"></i>
+                                        페이지별 상세 정보
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>페이지</th>
+                                                    <th>추출 성공</th>
+                                                    <th>텍스트 영역</th>
+                                                    <th>글자 수</th>
+                                                    <th>OCR 데이터 타입</th>
+                                                    <th>디버그 정보</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for page in results.pages %}
+                                                <tr class="{% if not page.extraction_success %}table-warning{% endif %}">
+                                                    <td><strong>{{page.page_number}}</strong></td>
+                                                    <td>
+                                                        {% if page.extraction_success %}
+                                                            <span class="badge bg-success">성공</span>
+                                                        {% else %}
+                                                            <span class="badge bg-warning">실패</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{page.text_count}}</td>
+                                                    <td>{{page.combined_text|length}}</td>
+                                                    <td><code>{{page.ocr_data|string|truncate(20)}}</code></td>
+                                                    <td>
+                                                        {% if page.debug_info %}
+                                                        <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="collapse" data-bs-target="#debug{{page.page_number}}">
+                                                            <i class="fas fa-eye"></i> 보기
+                                                        </button>
+                                                        <div class="collapse mt-2" id="debug{{page.page_number}}">
+                                                            <div class="card card-body">
+                                                                <small>
+                                                                    {% for debug_line in page.debug_info %}
+                                                                    <div class="mb-1">{{debug_line}}</div>
+                                                                    {% endfor %}
+                                                                </small>
+                                                            </div>
+                                                        </div>
+                                                        {% else %}
+                                                        <span class="text-muted">정보 없음</span>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 원본 데이터 -->
@@ -360,6 +476,37 @@
                 </div>
             </div>
         </div>
+
+        <!-- 추가 도움말 -->
+        <div class="container mt-4">
+            <div class="row">
+                <div class="col-12">
+                    <div class="alert alert-light">
+                        <h6><i class="fas fa-lightbulb me-2"></i>결과 개선을 위한 팁</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <ul class="mb-0">
+                                    <li>텍스트가 추출되지 않은 경우 DPI를 높여보세요 (400-600)</li>
+                                    <li>이미지 전처리를 활성화하면 품질이 개선될 수 있습니다</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <ul class="mb-0">
+                                    <li>스캔 품질이 낮은 경우 원본 PDF 품질을 확인하세요</li>
+                                    <li>텍스트 후처리는 인식 오류를 교정합니다</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <ul class="mb-0">
+                                    <li>디버그 정보에서 OCR 원본 데이터를 확인할 수 있습니다</li>
+                                    <li>문제가 지속되면 다른 DPI 설정으로 재시도하세요</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -368,23 +515,97 @@
     <script src="{{ url_for('static', filename='js/results.js') }}"></script>
 
     <script>
-        // 통계 계산
-        document.addEventListener('DOMContentLoaded', function() {
-            const results = {{results|tojson}};
-
-            // 총 텍스트 영역 수 계산
-            const totalTextRegions = results.pages.reduce((sum, page) => sum + page.text_count, 0);
-            document.getElementById('totalTextRegions').textContent = totalTextRegions.toLocaleString();
-
-            // 총 글자 수 계산
-            const totalCharacters = results.pages.reduce((sum, page) => sum + page.combined_text.length, 0);
-            document.getElementById('totalCharacters').textContent = totalCharacters.toLocaleString();
-
-            // 처리 시간 설정 (job_info가 있는 경우)
-            const processingTimeElement = document.getElementById('processingTime');
-            if (window.jobInfo && window.jobInfo.processing_time) {
-                processingTimeElement.textContent = window.jobInfo.processing_time + 's';
+        // 전역 함수들
+        function copyPageText(pageNumber) {
+            const pageText = document.getElementById(`pageText${pageNumber}`);
+            if (pageText) {
+                const text = pageText.textContent;
+                copyToClipboard(text);
             }
+        }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(function() {
+                    showNotification('클립보드에 복사되었습니다.', 'success');
+                }).catch(function(err) {
+                    console.error('복사 실패:', err);
+                    showNotification('복사에 실패했습니다.', 'error');
+                });
+            } else {
+                // 폴백 방법
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                try {
+                    document.execCommand('copy');
+                    showNotification('클립보드에 복사되었습니다.', 'success');
+                } catch (err) {
+                    console.error('복사 실패:', err);
+                    showNotification('복사에 실패했습니다.', 'error');
+                } finally {
+                    textArea.remove();
+                }
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type} position-fixed`;
+            notification.style.cssText = `
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+                min-width: 300px;
+                box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            `;
+
+            const iconMap = {
+                'success': 'fas fa-check-circle',
+                'error': 'fas fa-exclamation-triangle',
+                'warning': 'fas fa-exclamation-circle',
+                'info': 'fas fa-info-circle'
+            };
+
+            notification.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <i class="${iconMap[type]} me-2"></i>
+                    <span>${message}</span>
+                    <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+                </div>
+            `;
+
+            document.body.appendChild(notification);
+
+            // 자동 제거
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 5000);
+        }
+
+        // 페이지 로드 시 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            // 성공률에 따른 알림 표시
+            const successRate = {{results.processing_summary.success_rate}};
+            if (successRate < 50) {
+                showNotification('일부 페이지에서 텍스트 추출에 실패했습니다. 디버그 정보를 확인해보세요.', 'warning');
+            } else if (successRate < 100) {
+                showNotification(`${successRate.toFixed(1)}% 성공률로 처리되었습니다.`, 'info');
+            }
+
+            // 툴팁 초기화
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
         });
     </script>
 </body>
