@@ -1,55 +1,116 @@
-appnope==0.1.3
-backcall==0.2.0
-certifi==2022.12.7
-charset-normalizer==3.0.1
-cycler==0.11.0
-debugpy==1.6.6
-decorator==5.1.1
-entrypoints==0.4
-fonttools==4.38.0
-idna==3.4
-imageio==2.25.0
-ipykernel==6.16.2
-ipython==7.34.0
-jedi==0.18.2
-jupyter_client==7.4.9
-jupyter_core==4.12.0
-kiwisolver==1.4.4
-matplotlib==3.5.3
-matplotlib-inline==0.1.6
-nest-asyncio==1.5.6
-networkx==2.6.3
+# Pororo OCR PDF Parser Requirements
+# 기본 프레임워크
+Flask==2.2.5
+Jinja2==3.1.6
+Werkzeug==2.2.3
+MarkupSafe==2.1.5
+itsdangerous==2.1.2
+click==8.1.8
+
+# 데이터 처리
 numpy==1.21.6
-opencv-python==4.7.0.68
-packaging==23.0
-parso==0.8.3
-pexpect==4.8.0
-pickleshare==0.7.5
-Pillow==9.4.0
-pip==22.3.1
-prompt-toolkit==3.0.36
-psutil==5.9.4
-ptyprocess==0.7.0
-Pygments==2.14.0
-pyparsing==3.0.9
-python-dateutil==2.8.2
-pyyaml==6.0.1
-# PDF processing
-PyMuPDF>=1.20.0
-PyWavelets==1.3.0
-pyzmq==25.0.0
-requests==2.28.2
-scikit-image==0.19.3
 scipy==1.7.3
-setuptools==65.6.3
-six==1.16.0
-tifffile==2021.11.2
+pandas>=1.3.0
+tqdm==4.67.1
+
+# 이미지 처리
+Pillow==9.4.0
+opencv-python==4.7.0.68
+scikit-image==0.19.3
+imageio==2.25.0
+PyWavelets==1.3.0
+
+# PDF 처리
+PyMuPDF==1.22.5
+
+# 머신러닝/딥러닝
 torch==1.13.1
 torchvision==0.14.1
-tornado==6.2
-traitlets==5.9.0
-typing_extensions==4.4.0
+
+# CUDA 지원 (NVIDIA GPU 사용 시)
+nvidia-cublas-cu11==11.10.3.66
+nvidia-cuda-nvrtc-cu11==11.7.99
+nvidia-cuda-runtime-cu11==11.7.99
+nvidia-cudnn-cu11==8.5.0.96
+
+# 시각화
+matplotlib==3.5.3
+matplotlib-inline==0.1.6
+
+# 네트워킹
+requests==2.28.2
 urllib3==1.26.14
-wcwidth==0.2.6
+certifi==2022.12.7
+charset-normalizer==3.0.1
+idna==3.4
+
+# 유틸리티
+PyYAML==6.0.1
+python-dateutil==2.8.2
+six==1.16.0
+psutil==5.9.4
 wget==3.2
+
+# 개발/디버깅 도구
+ipython==7.34.0
+ipykernel==6.16.2
+jupyter_client==7.4.9
+jupyter_core==4.12.0
+debugpy==1.6.6
+jedi==0.18.2
+parso==0.8.3
+prompt-toolkit==3.0.36
+Pygments==2.14.0
+wcwidth==0.2.6
+backcall==0.2.0
+decorator==5.1.1
+pickleshare==0.7.5
+traitlets==5.9.0
+
+# 시스템 의존성
+appnope==0.1.3; sys_platform == "darwin"
+pexpect==4.8.0; sys_platform != "win32"
+ptyprocess==0.7.0; sys_platform != "win32"
+
+# 비동기 처리
+tornado==6.2
+pyzmq==25.0.0
+nest-asyncio==1.5.6
+
+# 네트워크/그래프
+networkx==2.6.3
+
+# 이미지 파일 형식
+tifffile==2021.11.2
+
+# 기타 유틸리티
+packaging==23.0
+setuptools==65.6.3
 wheel==0.37.1
+pip>=22.0.0
+
+# 타입 힌트
+typing_extensions==4.4.0
+
+# 압축 파일 처리
+zipp==3.15.0
+
+# 수학/과학 계산
+cycler==0.11.0
+fonttools==4.38.0
+kiwisolver==1.4.4
+pyparsing==3.0.9
+
+# 기타 진입점
+entrypoints==0.4
+importlib-metadata==6.7.0
+
+# OCR 엔진 (별도 설치 필요)
+# pororo - 수동 설치 필요: pip install pororo
+
+# 선택적 의존성 (설치 환경에 따라)
+# tensorflow>=2.8.0  # Pororo의 일부 모델에서 필요할 수 있음
+# transformers>=4.0.0  # Pororo NLP 기능 사용 시
+# easyocr>=1.6.0  # 대안 OCR 엔진
+# paddlepaddle>=2.0.0  # PaddleOCR 사용 시
+# paddleocr>=2.6.0  # PaddleOCR 사용 시
