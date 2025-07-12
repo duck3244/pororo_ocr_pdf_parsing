@@ -1,0 +1,95 @@
+classDiagram
+    %% Main CLI Class
+    class PororoOCRCLI {
+        -config_manager
+        -pdf_handler
+        -image_processor
+        -ocr_engine
+        -text_processor
+        +process_single_pdf()
+        +run_batch_processing()
+        +run_web_server()
+    }
+
+    %% Core Processing Classes
+    class OCREngine {
+        -model
+        -language
+        +extract_text()
+        +batch_extract()
+        +validate_image()
+    }
+
+    class PDFHandler {
+        -output_dir
+        +extract_pdf_info()
+        +convert_to_images()
+        +validate_pdf()
+    }
+
+    class ImageProcessor {
+        +preprocess_for_ocr()
+        +convert_to_grayscale()
+        +apply_threshold()
+        +enhance_contrast()
+    }
+
+    class TextPostProcessor {
+        +process_page_text()
+        +clean_text()
+        +extract_entities()
+        +detect_structure()
+    }
+
+    %% Configuration
+    class ConfigManager {
+        -config_path
+        +load_config()
+        +save_config()
+        +validate_config()
+        +get_processing_config()
+    }
+
+    %% Web Interface
+    class WebApp {
+        +upload_file()
+        +get_status()
+        +download_results()
+        +process_pdf_async()
+    }
+
+    %% Batch Processing
+    class BatchProcessor {
+        -input_dir
+        -output_dir
+        -max_workers
+        +find_pdf_files()
+        +process_batch()
+        +generate_summary()
+    }
+
+    %% Data Classes
+    class OCRResult {
+        +text_regions
+        +combined_text
+        +confidence
+    }
+
+    class ProcessingConfig {
+        +dpi
+        +preprocess
+        +postprocess
+    }
+
+    %% Relationships
+    PororoOCRCLI --> ConfigManager
+    PororoOCRCLI --> OCREngine
+    PororoOCRCLI --> PDFHandler
+    PororoOCRCLI --> ImageProcessor
+    PororoOCRCLI --> TextPostProcessor
+
+    WebApp --> PororoOCRCLI
+    BatchProcessor --> PororoOCRCLI
+
+    ConfigManager --> ProcessingConfig
+    OCREngine --> OCRResult

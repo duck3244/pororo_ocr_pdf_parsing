@@ -1,0 +1,97 @@
+sequenceDiagram
+    participant User
+    participant CLI as CLI Interface
+    participant Config as Config Manager
+    participant PDF as PDF Handler
+    participant IMG as Image Processor
+    participant OCR as OCR Engine
+    participant TEXT as Text Postprocessor
+    participant FS as File System
+
+    Note over User, FS: Single PDF Processing Flow
+
+    User->>CLI: pororo-ocr single document.pdf
+    CLI->>Config: load_config()
+    Config-->>CLI: configuration settings
+
+    CLI->>PDF: validate_pdf(pdf_path)
+    PDF-->>CLI: validation result
+
+    CLI->>PDF: extract_pdf_info(pdf_path)
+    PDF-->>CLI: pdf metadata
+
+    CLI->>PDF: convert_to_images(pdf_path, dpi)
+    PDF->>FS: save images
+    PDF-->>CLI: image_paths[]
+
+    alt preprocessing enabled
+        CLI->>IMG: batch_preprocess(image_paths)
+        loop for each image
+            IMG->>IMG: convert_to_grayscale()
+            IMG->>IMG: enhance_contrast()
+            IMG->>IMG: apply_threshold()
+            IMG->>IMG: correct_skew()
+        end
+        IMG->>FS: save preprocessed images
+        IMG-->>CLI: preprocessed_paths[]
+    end
+
+    CLI->>OCR: batch_extract(final_image_paths)
+    loop for each image
+        OCR->>OCR: extract_text(image_path)
+        Note over OCR: Pororo OCR Processing
+    end
+    OCR-->>CLI: ocr_results{}
+
+    alt postprocessing enabled
+        loop for each page
+            CLI->>TEXT: process_page_text(combined_text, page_num)
+            TEXT->>TEXT: clean_text()
+            TEXT->>TEXT: correct_common_errors()
+            TEXT->>TEXT: extract_entities()
+            TEXT->>TEXT: detect_text_structure()
+            TEXT-->>CLI: processed_text_data
+        end
+        
+        CLI->>TEXT: generate_document_summary(processed_pages)
+        TEXT-->>CLI: document_summary
+    end
+
+    CLI->>FS: save_results(final_results)
+    FS-->>CLI: saved file paths
+
+    alt cleanup enabled
+        CLI->>FS: cleanup_images(temp_image_paths)
+    end
+
+    CLI-->>User: Processing completed with results
+
+    Note over User, FS: Web Interface Flow (Async)
+
+    User->>+WebApp: POST /upload (PDF file)
+    WebApp->>WebApp: create_job_id()
+    WebApp->>WebApp: save_uploaded_file()
+    WebApp->>WebApp: start_async_processing()
+    WebApp-->>-User: job_id + status
+
+    par Async Processing
+        WebApp->>+OCRProcessor: process_pdf(pdf_path, job_id, options)
+        Note over OCRProcessor: Same processing flow as CLI
+        OCRProcessor->>PDF: convert_to_images()
+        OCRProcessor->>IMG: preprocess_images()
+        OCRProcessor->>OCR: extract_text()
+        OCRProcessor->>TEXT: postprocess_text()
+        OCRProcessor->>FS: save_results()
+        OCRProcessor-->>-WebApp: processing_complete
+    and Status Polling
+        User->>WebApp: GET /status/{job_id}
+        WebApp-->>User: progress updates
+    end
+
+    User->>WebApp: GET /results/{job_id}
+    WebApp-->>User: results page
+
+    User->>WebApp: GET /download/{job_id}/json
+    WebApp->>FS: read results file
+    FS-->>WebApp: file content
+    WebApp-->>User: download file

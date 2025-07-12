@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>처리 결과 - Pororo OCR PDF Parser</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- 헤더 -->
+        <header class="bg-success text-white py-3 mb-4">
+            <div class="container">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h1 class="mb-0">
+                            <i class="fas fa-check-circle me-2"></i>
+                            처리 완료
+                        </h1>
+                        <p class="mb-0 opacity-75">OCR 처리가 성공적으로 완료되었습니다</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <a href="/" class="btn btn-outline-light me-2">
+                            <i class="fas fa-plus me-1"></i>
+                            새 파일 처리
+                        </a>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-light dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="fas fa-download me-1"></i>
+                                다운로드
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="/download/{{job_id}}/json">
+                                    <i class="fas fa-file-code me-2"></i>JSON 파일
+                                </a></li>
+                                <li><a class="dropdown-item" href="/download/{{job_id}}/txt">
+                                    <i class="fas fa-file-alt me-2"></i>텍스트 파일
+                                </a></li>
+                                <li><a class="dropdown-item" href="/download/{{job_id}}/csv">
+                                    <i class="fas fa-file-csv me-2"></i>CSV 요약
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="container">
+            <!-- 통계 카드 -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-icon">
+                            <i class="fas fa-file-pdf"></i>
+                        </div>
+                        <div class="stats-content">
+                            <h3>{{results.pdf_info.page_count}}</h3>
+                            <p>총 페이지 수</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-icon">
+                            <i class="fas fa-text-width"></i>
+                        </div>
+                        <div class="stats-content">
+                            <h3 id="totalTextRegions">계산 중...</h3>
+                            <p>텍스트 영역</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-icon">
+                            <i class="fas fa-font"></i>
+                        </div>
+                        <div class="stats-content">
+                            <h3 id="totalCharacters">계산 중...</h3>
+                            <p>총 글자 수</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stats-content">
+                            <h3 id="processingTime">-</h3>
+                            <p>처리 시간</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 탭 네비게이션 -->
+            <ul class="nav nav-tabs nav-justified" id="resultTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="pages-tab" data-bs-toggle="tab" data-bs-target="#pages" type="button">
+                        <i class="fas fa-file-alt me-2"></i>
+                        페이지별 결과
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" type="button">
+                        <i class="fas fa-chart-bar me-2"></i>
+                        문서 요약
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="entities-tab" data-bs-toggle="tab" data-bs-target="#entities" type="button">
+                        <i class="fas fa-tags me-2"></i>
+                        추출된 정보
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="raw-tab" data-bs-toggle="tab" data-bs-target="#raw" type="button">
+                        <i class="fas fa-code me-2"></i>
+                        원본 데이터
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content">
+                <!-- 페이지별 결과 -->
+                <div class="tab-pane fade show active" id="pages" role="tabpanel">
+                    <div class="row">
+                        {% for page in results.pages %}
+                        <div class="col-12 mb-4">
+                            <div class="page-content-card">
+                                <div class="page-header">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h4>
+                                            <i class="fas fa-file-alt me-2"></i>
+                                            페이지 {{page.page_number}}
+                                        </h4>
+                                        <div>
+                                            <span class="badge bg-primary">{{page.text_count}}개 텍스트 영역</span>
+                                            <button class="btn btn-outline-secondary btn-sm ms-2" onclick="copyPageText({{page.page_number}})">
+                                                <i class="fas fa-copy me-1"></i>복사
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {% if page.text_regions and page.text_regions|length > 0 and page.text_regions[0] %}
+                                <div class="page-content">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="section-title">
+                                                <i class="fas fa-list me-2"></i>
+                                                개별 텍스트 영역
+                                            </h6>
+                                            <div class="text-regions">
+                                                {% for text in page.text_regions %}
+                                                {% if text and text.strip() %}
+                                                <div class="text-region">
+                                                    <div class="region-header">
+                                                        <small class="text-muted">영역 {{loop.index}}</small>
+                                                    </div>
+                                                    <div class="region-content">{{text}}</div>
+                                                </div>
+                                                {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6 class="section-title">
+                                                <i class="fas fa-align-left me-2"></i>
+                                                통합 텍스트
+                                            </h6>
+                                            <div class="combined-text" id="pageText{{page.page_number}}">
+                                                <pre>{{page.combined_text or '텍스트를 찾을 수 없습니다.'}}</pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif page.combined_text and page.combined_text.strip() %}
+                                <div class="page-content">
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <h6 class="section-title">
+                                                <i class="fas fa-align-left me-2"></i>
+                                                추출된 텍스트
+                                            </h6>
+                                            <div class="combined-text" id="pageText{{page.page_number}}">
+                                                <pre>{{page.combined_text}}</pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    이 페이지에서 텍스트를 찾을 수 없습니다.
+                                    {% if page.ocr_data %}
+                                    <details class="mt-2">
+                                        <summary>디버그 정보 (클릭하여 확장)</summary>
+                                        <pre class="mt-2"><code>{{page.ocr_data|tojson(indent=2)}}</code></pre>
+                                    </details>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- 문서 요약 -->
+                <div class="tab-pane fade" id="summary" role="tabpanel">
+                    {% if results.document_summary %}
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <div class="summary-card">
+                                <h5 class="card-title">
+                                    <i class="fas fa-chart-pie me-2"></i>
+                                    문서 통계
+                                </h5>
+                                <table class="table table-borderless">
+                                    <tr>
+                                        <td><i class="fas fa-file-alt me-2"></i>총 페이지:</td>
+                                        <td><strong>{{results.document_summary.document_summary.total_pages}}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><i class="fas fa-font me-2"></i>총 글자 수:</td>
+                                        <td><strong>{{results.document_summary.document_summary.total_characters|number_format}}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><i class="fas fa-text-width me-2"></i>총 단어 수:</td>
+                                        <td><strong>{{results.document_summary.document_summary.total_words|number_format}}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><i class="fas fa-calculator me-2"></i>페이지당 평균:</td>
+                                        <td><strong>{{results.document_summary.document_summary.average_chars_per_page|round|int}}</strong> 글자</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="summary-card">
+                                <h5 class="card-title">
+                                    <i class="fas fa-language me-2"></i>
+                                    언어 분포
+                                </h5>
+                                <div class="language-distribution">
+                                    {% for lang, count in results.document_summary.document_summary.language_distribution.items() %}
+                                    <div class="language-item mb-2">
+                                        <div class="d-flex justify-content-between">
+                                            <span>
+                                                <i class="fas fa-globe me-1"></i>
+                                                {{lang}}
+                                            </span>
+                                            <span><strong>{{count}}</strong> 페이지</span>
+                                        </div>
+                                        <div class="progress mt-1">
+                                            <div class="progress-bar"
+                                                 style="width: {{(count / results.document_summary.document_summary.total_pages * 100)|round(1)}}%">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        문서 요약 정보가 없습니다. 후처리가 활성화되지 않았을 수 있습니다.
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- 추출된 정보 -->
+                <div class="tab-pane fade" id="entities" role="tabpanel">
+                    {% if results.document_summary and results.document_summary.extracted_entities %}
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <div class="entity-card">
+                                <h6 class="entity-title">
+                                    <i class="fas fa-heading me-2"></i>
+                                    제목 ({{results.document_summary.extracted_entities.titles|length}})
+                                </h6>
+                                <div class="entity-content">
+                                    {% for title in results.document_summary.extracted_entities.titles %}
+                                    <span class="entity-badge">{{title}}</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="entity-card">
+                                <h6 class="entity-title">
+                                    <i class="fas fa-envelope me-2"></i>
+                                    이메일 ({{results.document_summary.extracted_entities.emails|length}})
+                                </h6>
+                                <div class="entity-content">
+                                    {% for email in results.document_summary.extracted_entities.emails %}
+                                    <span class="entity-badge">{{email}}</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="entity-card">
+                                <h6 class="entity-title">
+                                    <i class="fas fa-phone me-2"></i>
+                                    전화번호 ({{results.document_summary.extracted_entities.phone_numbers|length}})
+                                </h6>
+                                <div class="entity-content">
+                                    {% for phone in results.document_summary.extracted_entities.phone_numbers %}
+                                    <span class="entity-badge">{{phone}}</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="entity-card">
+                                <h6 class="entity-title">
+                                    <i class="fas fa-calendar me-2"></i>
+                                    날짜 ({{results.document_summary.extracted_entities.dates|length}})
+                                </h6>
+                                <div class="entity-content">
+                                    {% for date in results.document_summary.extracted_entities.dates %}
+                                    <span class="entity-badge">{{date}}</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        추출된 엔티티 정보가 없습니다. 후처리가 활성화되지 않았을 수 있습니다.
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- 원본 데이터 -->
+                <div class="tab-pane fade" id="raw" role="tabpanel">
+                    <div class="raw-data-card">
+                        <div class="raw-data-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-code me-2"></i>
+                                JSON 원본 데이터
+                            </h5>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="copyToClipboard('jsonData')">
+                                <i class="fas fa-copy me-1"></i>
+                                복사
+                            </button>
+                        </div>
+                        <div class="raw-data-content">
+                            <pre><code id="jsonData" class="language-json">{{results|tojson(indent=2)}}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="{{ url_for('static', filename='js/results.js') }}"></script>
+
+    <script>
+        // 통계 계산
+        document.addEventListener('DOMContentLoaded', function() {
+            const results = {{results|tojson}};
+
+            // 총 텍스트 영역 수 계산
+            const totalTextRegions = results.pages.reduce((sum, page) => sum + page.text_count, 0);
+            document.getElementById('totalTextRegions').textContent = totalTextRegions.toLocaleString();
+
+            // 총 글자 수 계산
+            const totalCharacters = results.pages.reduce((sum, page) => sum + page.combined_text.length, 0);
+            document.getElementById('totalCharacters').textContent = totalCharacters.toLocaleString();
+
+            // 처리 시간 설정 (job_info가 있는 경우)
+            const processingTimeElement = document.getElementById('processingTime');
+            if (window.jobInfo && window.jobInfo.processing_time) {
+                processingTimeElement.textContent = window.jobInfo.processing_time + 's';
+            }
+        });
+    </script>
+</body>
+</html>

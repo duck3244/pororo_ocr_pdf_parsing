@@ -1,0 +1,70 @@
+graph TB
+    %% User Interfaces
+    CLI[📋 CLI Interface<br/>pororo_ocr_cli.py]
+    WEB[🌐 Web Interface<br/>web/app.py]
+    API[🔌 REST API<br/>web/app.py]
+    BATCH[🔄 Batch Processor<br/>batch/batch_processor.py]
+
+    %% Configuration
+    CONFIG[⚙️ Config Manager<br/>config/config_manager.py]
+
+    %% Core Processing Modules
+    subgraph CORE ["🔧 Core Processing Modules"]
+        OCR[🔍 OCR Engine<br/>core/ocr_engine.py<br/>- Pororo Wrapper<br/>- Text Extraction]
+        PDF[📄 PDF Handler<br/>core/pdf_handler.py<br/>- PDF to Images<br/>- Metadata Extraction]
+        IMG[🖼️ Image Processor<br/>core/image_processor.py<br/>- Preprocessing<br/>- Quality Enhancement]
+        TEXT[🧠 Text Postprocessor<br/>core/text_postprocessor.py<br/>- Error Correction<br/>- Entity Extraction]
+    end
+
+    %% External Dependencies
+    subgraph EXT ["📚 External Dependencies"]
+        PORORO[Pororo OCR<br/>Korean NLP]
+        PYMUPDF[PyMuPDF<br/>PDF Processing]
+        OPENCV[OpenCV<br/>Image Processing]
+        FLASK[Flask<br/>Web Framework]
+    end
+
+    %% Data Flow
+    CLI --> CONFIG
+    WEB --> CONFIG
+    API --> CONFIG
+    BATCH --> CONFIG
+
+    CLI --> CORE
+    WEB --> CORE
+    API --> CORE
+    BATCH --> CORE
+
+    PDF --> PYMUPDF
+    IMG --> OPENCV
+    OCR --> PORORO
+    WEB --> FLASK
+    API --> FLASK
+
+    %% Processing Flow
+    PDF --> IMG
+    IMG --> OCR
+    OCR --> TEXT
+
+    %% Output
+    subgraph OUTPUT ["📊 Output Formats"]
+        JSON[📄 JSON Results]
+        TXT[📝 Text Files]
+        CSV[📊 CSV Reports]
+        HTML[🌐 Web UI]
+    end
+
+    CORE --> OUTPUT
+
+    %% Styling
+    classDef userInterface fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef coreModule fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef external fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef config fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef output fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+
+    class CLI,WEB,API,BATCH userInterface
+    class OCR,PDF,IMG,TEXT coreModule
+    class PORORO,PYMUPDF,OPENCV,FLASK external
+    class CONFIG config
+    class JSON,TXT,CSV,HTML output
