@@ -30,10 +30,6 @@ Pororo OCR을 기반으로 한 고성능 PDF 문서 텍스트 추출 도구입�
 ### 1. 설치
 
 ```bash
-# 저장소 클론
-git clone https://github.com/your-repo/pororo-ocr-pdf-parser.git
-cd pororo-ocr-pdf-parser
-
 # 의존성 설치
 pip install -r requirements.txt
 
